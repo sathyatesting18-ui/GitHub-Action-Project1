@@ -3,6 +3,9 @@ name: CICD Pipeline
 on:
   push:
     branches: [ "main" ]
+
+permissions:
+  contents: write    
   
 
 jobs:
