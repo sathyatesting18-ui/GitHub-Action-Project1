@@ -39,7 +39,7 @@ jobs:
         sudo systemctl enable docker
         docker --version
         sudo systemctl status docker
-        sudo usermod -aG docker ubuntu
+      
         
     - name: Gitleaks Installation
       run: sudo apt install gitleaks -y
