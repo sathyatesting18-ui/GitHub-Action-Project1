@@ -2,18 +2,23 @@ name: CICD Pipelines
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
 
+  # ============================================================
+  # 1. COMPILE
+  # ============================================================
   compile:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -22,42 +27,52 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Build with Maven
+      - name: Compile with Maven
         run: mvn compile
 
 
+  # ============================================================
+  # 2. SECURITY CHECK
+  # ============================================================
   security-check:
     runs-on: ubuntu-latest
     needs: compile
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-      - name: Docker installation
+      # Docker is already installed on GitHub-hosted runners
+      - name: Check Docker
+        run: |
+          docker --version
+          docker info
+
+      - name: Install Gitleaks
         run: |
           sudo apt update
-          sudo apt install -y docker.io
-          sudo systemctl start docker
-          sudo systemctl enable docker
-          docker --version
-          sudo systemctl status docker
+          sudo apt install -y gitleaks
 
-      - name: Gitleaks Installation
-        run: sudo apt install -y gitleaks
-
-      - name: Gitleaks Code Scan
-        run: gitleaks detect source . -r gitleaks-report.json -f json
+      - name: Run Gitleaks scan
+        run: |
+          gitleaks detect \
+            --source . \
+            --report-path gitleaks-report.json \
+            --report-format json
 
 
+  # ============================================================
+  # 3. BUILD + SONARQUBE SCAN
+  # ============================================================
   build-project-and-sonar-scan:
     runs-on: ubuntu-latest
     needs: security-check
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
         with:
-          # Disabling shallow clones is recommended for improving
-          # the relevancy of reporting
+          # Full Git history is recommended for SonarQube analysis
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -74,14 +89,16 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: SonarQube Quality Gate check
+      - name: SonarQube Quality Gate Check
         id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@master
+        uses: SonarSource/sonarqube-quality-gate-action@master
         with:
           pollingTimeoutSec: 600
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: Update dependency graph
         uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
